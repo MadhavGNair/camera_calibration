@@ -42,8 +42,25 @@ def resize_images(input_folder, output_folder, target_size=(600, 800)):
                 resized_img.save(output_path)
                 print(f"Resized: {output_filename}")
 
+def rename_images(folder_path):
+    # get all PNG files and sort them
+    png_files = [f for f in os.listdir(folder_path) if f.lower().endswith('.png')]
+    png_files.sort()
+    
+    for index, filename in enumerate(png_files):
+        # create new filename
+        new_filename = f"e_{index}.png"
+        
+        # full paths
+        old_path = os.path.join(folder_path, filename)
+        new_path = os.path.join(folder_path, new_filename)
+        
+        # rename
+        os.rename(old_path, new_path)
+        print(f"Renamed: {filename} -> {new_filename}")
+
 
 if __name__ == '__main__':
     input_folder = './images'
     output_folder = './images'
-    resize_images(input_folder, output_folder)
+    # resize_images(input_folder, output_folder)
