@@ -3,6 +3,8 @@ import cv2
 import numpy as np
 import glob
 
+TILE_SIZE = 16 # size of the chessboard square in mm
+
 class CameraCalibrator:
     def __init__(self, images_root, chessboard_size, square_size):
         self.width, self.height = chessboard_size
@@ -94,5 +96,5 @@ class CameraCalibrator:
 
 if __name__ == '__main__':
     IMAGE_PATH = 'D:/madhav/university/period_3/computer_vision/assignment_1/images/'
-    calibrator = CameraCalibrator(IMAGE_PATH, (6, 9), 13.5)
+    calibrator = CameraCalibrator(IMAGE_PATH, (6, 9), TILE_SIZE)
     calibrator.calibrate()
