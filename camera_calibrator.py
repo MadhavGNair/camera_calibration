@@ -80,10 +80,10 @@ class CameraCalibrator:
         
         # compute the local corners
         local_corners = np.zeros((self.width * self.height, 1, 2), np.float32)
-        for i in range(self.height):
-            for j in range(self.width):
-                x = j * self.square_size
-                y = i * self.square_size
+        for i in range(self.width):  # Iterate columns
+            for j in range(self.height):  # Iterate rows
+                x = i * self.square_size
+                y = j * self.square_size
 
                 # [x' y' w'] = P * [x y 1]
                 point = np.array([x, y, 1.0])
@@ -91,7 +91,10 @@ class CameraCalibrator:
                 # normalize the homogeneous coordinates
                 trans_point = trans_point / trans_point[2]
                 
-                local_corners[i * self.width + j, 0] = trans_point[:2]
+                # Calculate the index based on the cv2 ordering
+                index = (self.height - 1 - j) + i * self.height
+                
+                local_corners[index, 0] = trans_point[:2]
         return local_corners
 
     def __save_calibration_data(self, cam_matrix, coeffs, rvecs, tvecs, filepath):
@@ -139,7 +142,7 @@ class CameraCalibrator:
             ret, rvecs, tvecs = cv2.solvePnP(self.obj_points, corners, camera_matrix, dist_coeffs)
             
             # define axis points (origin and points along x, y, z axes)
-            axis_length = 7 * self.square_size  # Length of axes in same units as square_size
+            axis_length = 6 * self.square_size  # Length of axes in same units as square_size
             axis_points = np.float32([[0,0,0], 
                                     [axis_length,0,0], 
                                     [0,axis_length,0], 
@@ -198,7 +201,8 @@ class CameraCalibrator:
             cv2.destroyAllWindows()
 
             if save:
-                save_path = os.path.join(save_root, 'axes_on_chessboard.png')
+                fname = os.path.basename(params_path).split('.')[0]
+                save_path = os.path.join(save_root, f'{fname}.png')
                 cv2.imwrite(save_path, img)
                 print(f"Image with axes drawn saved to {save_path}")
             
@@ -227,10 +231,10 @@ class CameraCalibrator:
         # Use the corner as the origin (0, 0, 0)
         ax.scatter(0, 0, 0, c='red', marker='o', label='Chessboard Origin')  # Plot origin
         # --- Plot the x,y,z axes ---
-        axis_length = 100  # Length of axes in mm
+        axis_length = 30  # Length of axes in mm
         ax.quiver(0, 0, 0, axis_length, 0, 0, color='r', label='X Axis')  # X-axis
         ax.quiver(0, 0, 0, 0, axis_length, 0, color='g', label='Y Axis')  # Y-axis
-        ax.quiver(0, 0, 0, 0, 0, axis_length, color='b', label='Z Axis')  # Z-axis
+        ax.quiver(0, 0, 0, 0, 0, -axis_length, color='b', label='Z Axis')  # Z-axis
 
         # --- Plot camera poses ---
         for i in range(len(rvecs)):
@@ -294,7 +298,8 @@ class CameraCalibrator:
                 )
                 cv2.imshow(os.path.basename(image_path), img)
                 cv2.waitKey(0)
-                cv2.destroyAllWindows()            
+                cv2.destroyAllWindows()   
+            
 
         # calibrate the camera with no flags for default behavior of not fixing cx, cy, fx, or fy
         # this is not needed but ensures CALIB_FIX_PRINCIPAL_POINT and CALIB_FIX_FOCAL_LENGTH are not set
@@ -321,19 +326,20 @@ class CameraCalibrator:
 if __name__ == "__main__":
     # OFFLINE STEP:
     root_path = "./images/"
-    # for i in [1]:
+    # for i in range(1, 4):
     #     IMAGE_PATH = os.path.join(root_path, f"run_{i}")
     #     calibrator = CameraCalibrator(IMAGE_PATH, (6, 9), TILE_SIZE)
-    #     calibrator.calibrate(display=True, save=False)
+    #     calibrator.calibrate(display=False, save=True)
     #     print(f"Calibration for Run {i} complete.")
 
     # ONLINE STEP:
     # Load the calibration data
     TEST_IMG_PATH = os.path.join(root_path, "test")
     calibrator = CameraCalibrator(TEST_IMG_PATH, (6, 9), TILE_SIZE)
-    params_path = f"./output/run_3.json"
-    # calibrator.draw_axes_on_chessboard(os.path.join(TEST_IMG_PATH, f"test_3.png"), params_path, save=True)
-    calibrator.plot_camera_locations(params_path)
+    for i in range(1, 4):
+        params_path = f"./output/run_{i}.json"
+        # calibrator.draw_axes_on_chessboard(os.path.join(TEST_IMG_PATH, f"test.png"), params_path, save=True)
+        calibrator.plot_camera_locations(params_path)
 
         
         

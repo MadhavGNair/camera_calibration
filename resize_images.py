@@ -65,6 +65,6 @@ def rename_images(folder_path):
 
 
 if __name__ == "__main__":
-    input_folder = "./images"
-    output_folder = "./images"
-    # resize_images(input_folder, output_folder)
+    input_folder = "./images/test"
+    output_folder = "./images/test"
+    resize_images(input_folder, output_folder)
