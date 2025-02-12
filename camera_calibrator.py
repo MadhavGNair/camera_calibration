@@ -4,6 +4,7 @@ import os
 
 import cv2
 import numpy as np
+import matplotlib.pyplot as plt
 
 TILE_SIZE = 16  # size of the chessboard square in mm
 
@@ -94,11 +95,6 @@ class CameraCalibrator:
         return local_corners
 
     def __save_calibration_data(self, cam_matrix, coeffs, rvecs, tvecs, filepath):
-        if cam_matrix is None or coeffs is None or rvecs is None or tvecs is None:
-            raise ValueError(
-                "Calibration data not fully available. Run calibrate() first."
-            )
-
         calibration_data_json = {
             "camera_matrix": cam_matrix.tolist(),
             "dist_coeffs": coeffs.tolist(),
@@ -210,6 +206,63 @@ class CameraCalibrator:
         else:
             raise Exception("Chessboard corners not found!")
 
+    def plot_camera_locations(self, params_path):
+        """
+        Plots the 3D locations of the camera relative to the chessboard and the camera's viewing direction.
+
+        Args:
+            params_path: Path to the calibration parameters JSON file.
+        """
+        camera_matrix, dist_coeffs, rvecs, tvecs = self.__load_calibration_data(params_path)
+        rvecs = [np.array(rvec) for rvec in rvecs]
+        tvecs = [np.array(tvec) for tvec in tvecs]
+
+        fig = plt.figure()
+        ax = fig.add_subplot(111, projection='3d')
+        ax.set_xlabel('X')
+        ax.set_ylabel('Y')
+        ax.set_zlabel('Z')
+
+        # --- Plot the chessboard origin ---
+        # Use the corner as the origin (0, 0, 0)
+        ax.scatter(0, 0, 0, c='red', marker='o', label='Chessboard Origin')  # Plot origin
+        # --- Plot the x,y,z axes ---
+        axis_length = 100  # Length of axes in mm
+        ax.quiver(0, 0, 0, axis_length, 0, 0, color='r', label='X Axis')  # X-axis
+        ax.quiver(0, 0, 0, 0, axis_length, 0, color='g', label='Y Axis')  # Y-axis
+        ax.quiver(0, 0, 0, 0, 0, axis_length, color='b', label='Z Axis')  # Z-axis
+
+        # --- Plot camera poses ---
+        for i in range(len(rvecs)):
+            R, _ = cv2.Rodrigues(rvecs[i])  # Convert rotation vector to rotation matrix
+            # Camera position is the inverse transformation of the chessboard pose
+            camera_position = -np.dot(R.T, tvecs[i].reshape(3, 1))
+            ax.scatter(camera_position[0], camera_position[1], camera_position[2], marker='^', label=f'Camera {i+1}')
+        
+            # --- Plot the point the camera is looking at ---
+            # Assume the camera is looking at the center of the chessboard
+            board_width = (self.width - 1) * self.square_size
+            board_height = (self.height - 1) * self.square_size
+            center_chessboard = np.array([board_width / 2, board_height / 2, 0])
+
+            # Transform the chessboard center back to the world coordinate
+            ax.scatter(center_chessboard[0], center_chessboard[1], center_chessboard[2], marker='x', color='blue', label=f'Camera {i+1} Looking At')
+
+        ax.set_title('Camera Locations Relative to Chessboard')
+        ax.legend()
+
+        # --- Plot the chessboard plane ---
+        board_width = (self.width - 1) * self.square_size
+        board_height = (self.height - 1) * self.square_size
+        x = np.linspace(0, board_width, 10)
+        y = np.linspace(0, board_height, 10)
+        x, y = np.meshgrid(x, y)
+        z = np.zeros_like(x)
+        ax.plot_surface(x, y, z, alpha=0.2, color='gray', label='Chessboard Plane')
+
+        plt.show()
+
+
     def calibrate(self, display=False, save=True):
         for image_path in self.image_paths:
             # read the image and convert it to grayscale
@@ -244,6 +297,7 @@ class CameraCalibrator:
                 cv2.destroyAllWindows()            
 
         # calibrate the camera with no flags for default behavior of not fixing cx, cy, fx, or fy
+        # this is not needed but ensures CALIB_FIX_PRINCIPAL_POINT and CALIB_FIX_FOCAL_LENGTH are not set
         c_ret, camera_matrix, dist_coeffs, rvecs, tvecs = cv2.calibrateCamera(
             self.global_obj_points,
             self.global_img_points,
@@ -267,7 +321,7 @@ class CameraCalibrator:
 if __name__ == "__main__":
     # OFFLINE STEP:
     root_path = "./images/"
-    # for i in range(1, 4):
+    # for i in [1]:
     #     IMAGE_PATH = os.path.join(root_path, f"run_{i}")
     #     calibrator = CameraCalibrator(IMAGE_PATH, (6, 9), TILE_SIZE)
     #     calibrator.calibrate(display=True, save=False)
@@ -277,9 +331,9 @@ if __name__ == "__main__":
     # Load the calibration data
     TEST_IMG_PATH = os.path.join(root_path, "test")
     calibrator = CameraCalibrator(TEST_IMG_PATH, (6, 9), TILE_SIZE)
-    params_path = f"./output/run_2.json"
-    calibrator.draw_axes_on_chessboard(os.path.join(TEST_IMG_PATH, f"test_3.png"), params_path, save=True)
-        
+    params_path = f"./output/run_3.json"
+    # calibrator.draw_axes_on_chessboard(os.path.join(TEST_IMG_PATH, f"test_3.png"), params_path, save=True)
+    calibrator.plot_camera_locations(params_path)
 
         
         
