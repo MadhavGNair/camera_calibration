@@ -119,53 +119,92 @@ class CameraCalibrator:
             np.array(calibration_data["tvecs"]),
         )
 
-    def draw_axes_on_chessboard(self, image_path, params_path):
+    def draw_axes_on_chessboard(self, image_path, params_path, save=False, save_root='./output'):
+        """
+        Function to draw X, Y, Z axes on the chessboard in the image based on estimated camera parameters.
+        :param image_path: Path to the image of the chessboard
+        :param params_path: Path to the calibration parameters file
+        :param save: Boolean flag to save the image with axes drawn
+        :return: Image with axes drawn on the chessboard
+        """
         camera_matrix, dist_coeffs, _, _ = self.__load_calibration_data(params_path)
         
         img = cv2.imread(image_path)
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
                 
-        # Find chessboard corners
+        # find corners for test image
         ret, corners = cv2.findChessboardCorners(gray, (self.height, self.width), None)
         
         if ret:
-            # Refine corner detection
+            # refine corner detection
             corners = cv2.cornerSubPix(gray, corners, (11, 11), (-1, -1), self.criteria)
                         
             # find rotation and translation vectors
             ret, rvecs, tvecs = cv2.solvePnP(self.obj_points, corners, camera_matrix, dist_coeffs)
             
-            # Define axis points (origin and points along x, y, z axes)
-            axis_length = 5 * self.square_size  # Length of axes in same units as square_size
+            # define axis points (origin and points along x, y, z axes)
+            axis_length = 7 * self.square_size  # Length of axes in same units as square_size
             axis_points = np.float32([[0,0,0], 
                                     [axis_length,0,0], 
                                     [0,axis_length,0], 
                                     [0,0,-axis_length]])
-            
-            # Project 3D points to image plane
-            imgpts, _ = cv2.projectPoints(axis_points, rvecs, tvecs, camera_matrix, dist_coeffs)
-            
-            # Draw axes
-            color_x = (90, 90, 219)  # Red
-            color_y = (124, 219, 90)  # Green
-            color_z = (90, 194, 219)  # Blue
 
-            origin = tuple(map(int, imgpts[0].ravel()))
-            img = cv2.line(img, origin, tuple(map(int, imgpts[1].ravel())), color_x, 2)  # X-axis (Red)
-            img = cv2.line(img, origin, tuple(map(int, imgpts[2].ravel())), color_y, 2)  # Y-axis (Green)
-            img = cv2.line(img, origin, tuple(map(int, imgpts[3].ravel())), color_z, 2)  # Z-axis (Blue)
+            # define cube points
+            cube_length = 3 * self.square_size
+            cube_points = np.float32([[0,0,0], [0,cube_length,0], [cube_length,cube_length,0], [cube_length,0,0],
+                            [0,0,-cube_length],[0,cube_length,-cube_length],[cube_length,cube_length,-cube_length],[cube_length,0,-cube_length] ])
             
-            # Add axis labels
+            # project axis points to image plane
+            axis_imgpts, _ = cv2.projectPoints(axis_points, rvecs, tvecs, camera_matrix, dist_coeffs)
+            # project cube points to image plane
+            cube_imgpts, _ = cv2.projectPoints(cube_points, rvecs, tvecs, camera_matrix, dist_coeffs)
+
+            # define axis colors
+            color_x = (90, 90, 219)
+            color_y = (124, 219, 90)
+            color_z = (219, 194, 90)
+
+            # draw axis lines
+            origin = tuple(map(int, axis_imgpts[0].ravel()))
+            cv2.arrowedLine(img, origin, tuple(map(int, axis_imgpts[1].ravel())), color_x, 2, tipLength=0.03)
+            cv2.arrowedLine(img, origin, tuple(map(int, axis_imgpts[2].ravel())), color_y, 2, tipLength=0.03)
+            cv2.arrowedLine(img, origin, tuple(map(int, axis_imgpts[3].ravel())), color_z, 2, tipLength=0.03)
+            
+            # add axis labels
             font = cv2.FONT_HERSHEY_COMPLEX_SMALL
             offset = 15
-            img = cv2.putText(img, 'x', tuple(map(int, imgpts[1].ravel() + offset)), font, 1, color_x, 2)
-            img = cv2.putText(img, 'y', tuple(map(int, imgpts[2].ravel() + offset)), font, 1, color_y, 2)
-            img = cv2.putText(img, 'z', tuple(map(int, imgpts[3].ravel() + offset)), font, 1, color_z, 2)
+            img = cv2.putText(img, 'x', tuple(map(int, axis_imgpts[1].ravel() + offset)), font, 1, color_x, 2)
+            img = cv2.putText(img, 'y', tuple(map(int, axis_imgpts[2].ravel() + offset)), font, 1, color_y, 2)
+            img = cv2.putText(img, 'z', tuple(map(int, axis_imgpts[3].ravel() + offset)), font, 1, color_z, 2)
 
-            # Display image
-            cv2.imshow('Axes on Chessboard', img)
+            # define cube colors
+            top_shade = (153, 255, 204)
+            pillar_shade = (0, 153, 255)
+
+            cube_imgpts = np.int32(cube_imgpts).reshape(-1,2)
+            
+            # draw pillars
+            for i,j in zip(range(4),range(4,8)):
+                img = cv2.line(img, tuple(cube_imgpts[i]), tuple(cube_imgpts[j]), pillar_shade, 1)
+            
+            # draw bottom borders
+            img = cv2.drawContours(img, [cube_imgpts[:4]], -1, pillar_shade, 1)
+
+            # shade the top layer
+            img = cv2.drawContours(img, [cube_imgpts[4:]], -1, pillar_shade, -1)
+
+            # draw top borders
+            img = cv2.drawContours(img, [cube_imgpts[4:]], -1, pillar_shade, 1)
+
+            # display image
+            cv2.imshow('Axes and Cube on Chessboard', img)
             cv2.waitKey(0)
-            cv2.destroyAllWindows() 
+            cv2.destroyAllWindows()
+
+            if save:
+                save_path = os.path.join(save_root, 'axes_on_chessboard.png')
+                cv2.imwrite(save_path, img)
+                print(f"Image with axes drawn saved to {save_path}")
             
             return img
         else:
@@ -238,10 +277,8 @@ if __name__ == "__main__":
     # Load the calibration data
     TEST_IMG_PATH = os.path.join(root_path, "test")
     calibrator = CameraCalibrator(TEST_IMG_PATH, (6, 9), TILE_SIZE)
-    for i in range(1, 4):
-        params_path = f"./output/run_{i}.json"
-        for j in range(1, 4):
-            calibrator.draw_axes_on_chessboard(os.path.join(TEST_IMG_PATH, f"test_{j}.png"), params_path)
+    params_path = f"./output/run_2.json"
+    calibrator.draw_axes_on_chessboard(os.path.join(TEST_IMG_PATH, f"test_3.png"), params_path, save=True)
         
 
         
