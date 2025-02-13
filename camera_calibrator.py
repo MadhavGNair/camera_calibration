@@ -17,15 +17,27 @@ class CameraCalibrator:
         self.image_paths = glob.glob(images_root + "/*.png")
         self.criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
 
+        # define the 3D corner points of the chessboard
         self.obj_points = np.zeros((self.width * self.height, 3), np.float32)
         self.obj_points[:, :2] = (
             np.mgrid[0 : self.height, 0 : self.width].T.reshape(-1, 2)
             * self.square_size
         )
+
+        # initialize list to store global object and image points for every image
         self.global_obj_points = []
         self.global_img_points = []
 
     def __get_mouse_click(self, event, x, y, flags, param):
+        """
+        Function to get the (x, y) coordinates of the left mouse button click on an image.
+        :param event: Event type
+        :param x: x-coordinate of the mouse click
+        :param y: y-coordinate of the mouse click
+        :param flags: Flags
+        :param param: Parameters
+        :return: List of (x, y) coordinates of the mouse clicks
+        """
         corners = param["global_corners"]
         win_title = param["win_title"]
         image = param["image"]
@@ -38,6 +50,11 @@ class CameraCalibrator:
         return corners
 
     def __select_global_corners(self, image):
+        """
+        Function to manually select the global corners of the chessboard in the image.
+        :param image: Image of the chessboard
+        :return: List of selected global corners in the order top-left, top-right, bottom-right, bottom-left
+        """
         win_title = (
             "Select Corners in order top-left, top-right, bottom-right, bottom-left"
         )
@@ -57,6 +74,11 @@ class CameraCalibrator:
         return global_corners
 
     def __compute_local_corners(self, image):
+        """
+        Function to compute the local corners of the chessboard in the image based on the global corners.
+        :param image: Image of the chessboard
+        :return: Local corners of the chessboard in the image
+        """
         global_corners = self.__select_global_corners(image)
         tl, tr, br, bl = global_corners
 
@@ -74,30 +96,38 @@ class CameraCalibrator:
             [0, ort_height]
         ])
         
-        # CHOICE TASK 3: calculate perspective transform matrix (P) that converts the physical 
+        # CHOICE TASK 3: calculate perspective transform matrix (P) that converts between the physical 
         # rectangle (straight) to the manually provided rectangle (tilted)
         perspective_matrix = cv2.getPerspectiveTransform(ort_corners, corners)
         
         # compute the local corners
         local_corners = np.zeros((self.width * self.height, 1, 2), np.float32)
-        for i in range(self.width):  # Iterate columns
-            for j in range(self.height):  # Iterate rows
+        for i in range(self.width):
+            for j in range(self.height):
                 x = i * self.square_size
                 y = j * self.square_size
 
-                # [x' y' w'] = P * [x y 1]
+                # [x' y' w']^T = P^T * [x y 1]^T
                 point = np.array([x, y, 1.0])
                 trans_point = perspective_matrix.dot(point)
                 # normalize the homogeneous coordinates
                 trans_point = trans_point / trans_point[2]
                 
-                # Calculate the index based on the cv2 ordering
+                # calculate the index based on the cv2 ordering (bottom-up, left-right)
                 index = (self.height - 1 - j) + i * self.height
-                
                 local_corners[index, 0] = trans_point[:2]
         return local_corners
 
     def __save_calibration_data(self, cam_matrix, coeffs, rvecs, tvecs, filepath):
+        """
+        Function to save the camera calibration data to a JSON file.
+        :param cam_matrix: Camera matrix
+        :param coeffs: Distortion coefficients
+        :param rvecs: Rotation vectors
+        :param tvecs: Translation vectors
+        :param filepath: Path to save the calibration data
+        :return: None
+        """
         calibration_data_json = {
             "camera_matrix": cam_matrix.tolist(),
             "dist_coeffs": coeffs.tolist(),
@@ -109,6 +139,11 @@ class CameraCalibrator:
         print(f"Calibration data saved to {filepath}.json")
 
     def __load_calibration_data(self, filepath):
+        """
+        Function to load the camera calibration data from a JSON file.
+        :param filepath: Path to the calibration data JSON file
+        :return: Camera matrix, distortion coefficients, rotation vectors, translation vectors
+        """
         with open(filepath, "r") as f:
             calibration_data = json.load(f)
         return (
@@ -118,12 +153,13 @@ class CameraCalibrator:
             np.array(calibration_data["tvecs"]),
         )
 
-    def draw_axes_on_chessboard(self, image_path, params_path, save=False, save_root='./output'):
+    def draw_axes_and_cube_on_chessboard(self, image_path, params_path, save=False, save_root='./output'):
         """
         Function to draw X, Y, Z axes on the chessboard in the image based on estimated camera parameters.
         :param image_path: Path to the image of the chessboard
         :param params_path: Path to the calibration parameters file
         :param save: Boolean flag to save the image with axes drawn
+        :param save_root: Root path to save the image with axes drawn
         :return: Image with axes drawn on the chessboard
         """
         camera_matrix, dist_coeffs, _, _ = self.__load_calibration_data(params_path)
@@ -138,11 +174,11 @@ class CameraCalibrator:
             # refine corner detection
             corners = cv2.cornerSubPix(gray, corners, (11, 11), (-1, -1), self.criteria)
                         
-            # find rotation and translation vectors
+            # estimate rotation and translation vectors
             ret, rvecs, tvecs = cv2.solvePnP(self.obj_points, corners, camera_matrix, dist_coeffs)
             
             # define axis points (origin and points along x, y, z axes)
-            axis_length = 6 * self.square_size  # Length of axes in same units as square_size
+            axis_length = 6 * self.square_size
             axis_points = np.float32([[0,0,0], 
                                     [axis_length,0,0], 
                                     [0,axis_length,0], 
@@ -200,6 +236,7 @@ class CameraCalibrator:
             cv2.waitKey(0)
             cv2.destroyAllWindows()
 
+            # save image with axes drawn if needed
             if save:
                 fname = os.path.basename(params_path).split('.')[0]
                 save_path = os.path.join(save_root, f'{fname}.png')
@@ -212,10 +249,9 @@ class CameraCalibrator:
 
     def plot_camera_locations(self, params_path):
         """
-        Plots the 3D locations of the camera relative to the chessboard and the camera's viewing direction.
-
-        Args:
-            params_path: Path to the calibration parameters JSON file.
+        Function to plot the 3D locations of the camera relative to the chessboard and the camera's viewing direction.
+        :param params_path: Path to the calibration parameters file
+        :return: None
         """
         camera_matrix, dist_coeffs, rvecs, tvecs = self.__load_calibration_data(params_path)
         rvecs = [np.array(rvec) for rvec in rvecs]
@@ -227,35 +263,32 @@ class CameraCalibrator:
         ax.set_ylabel('Y')
         ax.set_zlabel('Z')
 
-        # --- Plot the chessboard origin ---
-        # Use the corner as the origin (0, 0, 0)
-        ax.scatter(0, 0, 0, c='red', marker='o', label='Chessboard Origin')  # Plot origin
-        # --- Plot the x,y,z axes ---
-        axis_length = 30  # Length of axes in mm
-        ax.quiver(0, 0, 0, axis_length, 0, 0, color='r', label='X Axis')  # X-axis
-        ax.quiver(0, 0, 0, 0, axis_length, 0, color='g', label='Y Axis')  # Y-axis
-        ax.quiver(0, 0, 0, 0, 0, -axis_length, color='b', label='Z Axis')  # Z-axis
+        # plot chessboard origin
+        ax.scatter(0, 0, 0, c='red', marker='o', label='Chessboard Origin')
+        # plot the x,y,z axes
+        axis_length = 30
+        ax.quiver(0, 0, 0, axis_length, 0, 0, color='r', label='X Axis')
+        ax.quiver(0, 0, 0, 0, axis_length, 0, color='g', label='Y Axis')
+        ax.quiver(0, 0, 0, 0, 0, -axis_length, color='b', label='Z Axis')
 
-        # --- Plot camera poses ---
+        # plot camera poses
         for i in range(len(rvecs)):
-            R, _ = cv2.Rodrigues(rvecs[i])  # Convert rotation vector to rotation matrix
-            # Camera position is the inverse transformation of the chessboard pose
+            # convert rotation vector to rotation matrix
+            R, _ = cv2.Rodrigues(rvecs[i])
+            # since extrinsic params show image relative to camera, camera position is the inverse transformation of the params
             camera_position = -np.dot(R.T, tvecs[i].reshape(3, 1))
             ax.scatter(camera_position[0], camera_position[1], camera_position[2], marker='^', label=f'Camera {i+1}')
         
-            # --- Plot the point the camera is looking at ---
-            # Assume the camera is looking at the center of the chessboard
+            # mark the center of the chessboard for visual clarity
             board_width = (self.width - 1) * self.square_size
             board_height = (self.height - 1) * self.square_size
             center_chessboard = np.array([board_width / 2, board_height / 2, 0])
-
-            # Transform the chessboard center back to the world coordinate
-            ax.scatter(center_chessboard[0], center_chessboard[1], center_chessboard[2], marker='x', color='blue', label=f'Camera {i+1} Looking At')
+            ax.scatter(center_chessboard[0], center_chessboard[1], center_chessboard[2], marker='x', color='blue', label=f'Board center')
 
         ax.set_title('Camera Locations Relative to Chessboard')
         ax.legend()
 
-        # --- Plot the chessboard plane ---
+        # plot the chessboard plane
         board_width = (self.width - 1) * self.square_size
         board_height = (self.height - 1) * self.square_size
         x = np.linspace(0, board_width, 10)
@@ -268,6 +301,12 @@ class CameraCalibrator:
 
 
     def calibrate(self, display=False, save=True):
+        """
+        Function to obtain intrinsic and extrinsic parameters of camera using images of the chessboard.
+        :param display: Boolean flag to display the images with detected corners
+        :param save: Boolean flag to save the calibration data
+        :return: None
+        """
         for image_path in self.image_paths:
             # read the image and convert it to grayscale
             img = cv2.imread(image_path)
@@ -300,7 +339,6 @@ class CameraCalibrator:
                 cv2.waitKey(0)
                 cv2.destroyAllWindows()   
             
-
         # calibrate the camera with no flags for default behavior of not fixing cx, cy, fx, or fy
         # this is not needed but ensures CALIB_FIX_PRINCIPAL_POINT and CALIB_FIX_FOCAL_LENGTH are not set
         c_ret, camera_matrix, dist_coeffs, rvecs, tvecs = cv2.calibrateCamera(
@@ -314,6 +352,7 @@ class CameraCalibrator:
 
         print("Calibration successful." if c_ret else "Calibration failed.")
 
+        # save the calibration data if needed
         if c_ret and save:
             print("Calibration successful. Saving data...")
             save_root = "./output"
@@ -321,6 +360,7 @@ class CameraCalibrator:
             self.__save_calibration_data(
                 camera_matrix, dist_coeffs, rvecs, tvecs, save_path
             )
+        
 
 
 if __name__ == "__main__":
@@ -329,7 +369,7 @@ if __name__ == "__main__":
     # for i in range(1, 4):
     #     IMAGE_PATH = os.path.join(root_path, f"run_{i}")
     #     calibrator = CameraCalibrator(IMAGE_PATH, (6, 9), TILE_SIZE)
-    #     calibrator.calibrate(display=False, save=True)
+    #     calibrator.calibrate(display=True, save=False)
     #     print(f"Calibration for Run {i} complete.")
 
     # ONLINE STEP:
@@ -338,7 +378,7 @@ if __name__ == "__main__":
     calibrator = CameraCalibrator(TEST_IMG_PATH, (6, 9), TILE_SIZE)
     for i in range(1, 4):
         params_path = f"./output/run_{i}.json"
-        # calibrator.draw_axes_on_chessboard(os.path.join(TEST_IMG_PATH, f"test.png"), params_path, save=True)
+        # calibrator.draw_axes_and_cube_on_chessboard(os.path.join(TEST_IMG_PATH, f"test.png"), params_path, save=True)
         calibrator.plot_camera_locations(params_path)
 
         
