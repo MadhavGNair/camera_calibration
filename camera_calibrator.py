@@ -155,6 +155,7 @@ class CameraCalibrator:
     ):
         """
         Function to draw X, Y, Z axes on the chessboard in the image based on estimated camera parameters.
+        Base code taken from: https://docs.opencv.org/3.4/d7/d53/tutorial_py_pose.html
         :param image_path: Path to the image of the chessboard
         :param params_path: Path to the calibration parameters file
         :param save: Boolean flag to save the image with axes drawn
@@ -279,7 +280,6 @@ class CameraCalibrator:
             )
 
             # define cube colors
-            top_shade = (153, 255, 204)
             pillar_shade = (0, 153, 255)
 
             cube_imgpts = np.int32(cube_imgpts).reshape(-1, 2)
@@ -313,10 +313,10 @@ class CameraCalibrator:
             max_distance = 4000
             value = int(max(0, min(255, 255 * (1 - distance/max_distance))))
             
-            # compute the normal vector of the top face
+            # compute the normal vector of the top face in camera coordinates
             normal_vector = np.dot(R, np.array([0, 0, 1]))
             
-            # compute the angle between the normal vector and the z-axis
+            # compute the angle between the normal vector (z-axis of the cube) and the z-axis (of the camera)
             camera_axis = np.array([0, 0, 1])
             cos_angle = np.dot(normal_vector, camera_axis)
             angle = np.arccos(cos_angle) * 180/np.pi
@@ -368,58 +368,57 @@ class CameraCalibrator:
         tvecs = [np.array(tvec) for tvec in tvecs]
 
         fig = plt.figure()
-        ax = fig.add_subplot(111, projection="3d")
-        ax.set_xlabel("X")
-        ax.set_ylabel("Y")
-        ax.set_zlabel("Z")
+        ax = fig.add_subplot(111, projection='3d')
 
-        # plot chessboard origin
-        ax.scatter(0, 0, 0, c="red", marker="o", label="Chessboard Origin")
-        # plot the x,y,z axes
+        # plot the axes at the origin
         axis_length = 30
-        ax.quiver(0, 0, 0, axis_length, 0, 0, color="r", label="X Axis")
-        ax.quiver(0, 0, 0, 0, axis_length, 0, color="g", label="Y Axis")
-        ax.quiver(0, 0, 0, 0, 0, -axis_length, color="b", label="Z Axis")
 
-        # plot camera poses
+        # x-axis
+        ax.plot([0, axis_length], [0, 0], [0, 0], 'r-', linewidth=2)
+        ax.text(axis_length, 0, 0, 'X', color='red')
+
+        # y-axis
+        ax.plot([0, 0], [0, axis_length], [0, 0], 'g-', linewidth=2)
+        ax.text(0, axis_length, 0, 'Y', color='green')
+
+        # z-axis (negated to match with axes plotting from ONLINE part of assignment)
+        ax.plot([0, 0], [0, 0], [0, -axis_length], 'b-', linewidth=2)
+        ax.text(0, 0, -axis_length, 'Z', color='blue')
+
+        # plot each camera position
         for i in range(len(rvecs)):
             # convert rotation vector to rotation matrix
             R, _ = cv2.Rodrigues(rvecs[i])
-            # since extrinsic params show image relative to camera, camera position is the inverse transformation of the params
-            camera_position = -np.dot(R.T, tvecs[i].reshape(3, 1))
-            ax.scatter(
-                camera_position[0],
-                camera_position[1],
-                camera_position[2],
-                marker="^",
-                label=f"Camera {i+1}",
-            )
 
-            # mark the center of the chessboard for visual clarity
-            board_width = (self.width - 1) * self.square_size
-            board_height = (self.height - 1) * self.square_size
-            center_chessboard = np.array([board_width / 2, board_height / 2, 0])
-            ax.scatter(
-                center_chessboard[0],
-                center_chessboard[1],
-                center_chessboard[2],
-                marker="x",
-                color="blue",
-                label=f"Board center",
-            )
+            # camera position is the inverse transformation of the chessboard to camera
+            camera_position = -np.dot(R.T, tvecs[i])
 
-        ax.set_title("Camera Locations Relative to Chessboard")
-        ax.legend()
+            ax.plot([camera_position[0, 0]], [camera_position[1, 0]], [camera_position[2, 0]], 'ro', markersize=5)
 
-        # plot the chessboard plane
-        board_width = (self.width - 1) * self.square_size
-        board_height = (self.height - 1) * self.square_size
-        x = np.linspace(0, board_width, 10)
-        y = np.linspace(0, board_height, 10)
-        x, y = np.meshgrid(x, y)
-        z = np.zeros_like(x)
-        ax.plot_surface(x, y, z, alpha=0.2, color="gray", label="Chessboard Plane")
+        # plot the chessboard grid
+        x = np.arange(0, self.height) * self.square_size
+        y = np.arange(0, self.width) * self.square_size
+        xv, yv = np.meshgrid(x, y)
 
+        # set z-coordinates to 0
+        zv = np.zeros_like(xv)
+
+        # flatten the coordinate arrays for plotting
+        x_flat = xv.flatten()
+        y_flat = yv.flatten()
+        z_flat = zv.flatten()
+
+        # plot the grid points
+        ax.scatter(x_flat, y_flat, z_flat, c='k', marker='.')
+
+        # set labels and title
+        ax.set_xlabel('X (mm)')
+        ax.set_ylabel('Y (mm)')
+        ax.set_zlabel('Z (mm)')
+        ax.set_title('Camera Positions and Chessboard Grid')
+        ax.set_aspect('equal')
+
+        # show the plot
         plt.show()
 
     def calibrate(self, display=False, save=True):
@@ -499,5 +498,5 @@ if __name__ == "__main__":
     calibrator = CameraCalibrator(TEST_IMG_PATH, (6, 9), TILE_SIZE)
     for i in range(1, 4):
         params_path = f"./output/run_{i}.json"
-        calibrator.draw_axes_and_cube_on_chessboard(os.path.join(TEST_IMG_PATH, f"test.png"), params_path, save=True)
-        # calibrator.plot_camera_locations(params_path)
+        # calibrator.draw_axes_and_cube_on_chessboard(os.path.join(TEST_IMG_PATH, f"test.png"), params_path, save=False)
+        calibrator.plot_camera_locations(params_path)
