@@ -3,8 +3,8 @@ import json
 import os
 
 import cv2
-import numpy as np
 import matplotlib.pyplot as plt
+import numpy as np
 
 TILE_SIZE = 16  # size of the chessboard square in mm
 
@@ -83,23 +83,20 @@ class CameraCalibrator:
         tl, tr, br, bl = global_corners
 
         corners = np.float32([tl, tr, br, bl])
-        
+
         # compute the orthogonal rectangle size (when viewed straight ahead)
         ort_width = (self.width - 1) * self.square_size
         ort_height = (self.height - 1) * self.square_size
-        
+
         # define the orthogonal rectangle corners
-        ort_corners = np.float32([
-            [0, 0],
-            [ort_width, 0],
-            [ort_width, ort_height],
-            [0, ort_height]
-        ])
-        
-        # CHOICE TASK 3: calculate perspective transform matrix (P) that converts between the physical 
+        ort_corners = np.float32(
+            [[0, 0], [ort_width, 0], [ort_width, ort_height], [0, ort_height]]
+        )
+
+        # CHOICE TASK 3: calculate perspective transform matrix (P) that converts between the physical
         # rectangle (straight) to the manually provided rectangle (tilted)
         perspective_matrix = cv2.getPerspectiveTransform(ort_corners, corners)
-        
+
         # compute the local corners
         local_corners = np.zeros((self.width * self.height, 1, 2), np.float32)
         for i in range(self.width):
@@ -112,7 +109,7 @@ class CameraCalibrator:
                 trans_point = perspective_matrix.dot(point)
                 # normalize the homogeneous coordinates
                 trans_point = trans_point / trans_point[2]
-                
+
                 # calculate the index based on the cv2 ordering (bottom-up, left-right)
                 index = (self.height - 1 - j) + i * self.height
                 local_corners[index, 0] = trans_point[:2]
@@ -153,7 +150,9 @@ class CameraCalibrator:
             np.array(calibration_data["tvecs"]),
         )
 
-    def draw_axes_and_cube_on_chessboard(self, image_path, params_path, save=False, save_root='./output'):
+    def draw_axes_and_cube_on_chessboard(
+        self, image_path, params_path, save=False, save_root="./output"
+    ):
         """
         Function to draw X, Y, Z axes on the chessboard in the image based on estimated camera parameters.
         :param image_path: Path to the image of the chessboard
@@ -163,36 +162,58 @@ class CameraCalibrator:
         :return: Image with axes drawn on the chessboard
         """
         camera_matrix, dist_coeffs, _, _ = self.__load_calibration_data(params_path)
-        
+
         img = cv2.imread(image_path)
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-                
+
         # find corners for test image
         ret, corners = cv2.findChessboardCorners(gray, (self.height, self.width), None)
-        
+
         if ret:
             # refine corner detection
             corners = cv2.cornerSubPix(gray, corners, (11, 11), (-1, -1), self.criteria)
-                        
+
             # estimate rotation and translation vectors
-            ret, rvecs, tvecs = cv2.solvePnP(self.obj_points, corners, camera_matrix, dist_coeffs)
-            
+            ret, rvecs, tvecs = cv2.solvePnP(
+                self.obj_points, corners, camera_matrix, dist_coeffs
+            )
+
             # define axis points (origin and points along x, y, z axes)
             axis_length = 6 * self.square_size
-            axis_points = np.float32([[0,0,0], 
-                                    [axis_length,0,0], 
-                                    [0,axis_length,0], 
-                                    [0,0,-axis_length]])
+            # NOTE: the z-axis is negated for aesthetic reasons so that it aligns with the cube. It was mentioned by Prof Poppe
+            # that this is fine as long as it is consistent across all the images. If not simply remove the negation for original view.
+            axis_points = np.float32(
+                [
+                    [0, 0, 0],
+                    [axis_length, 0, 0],
+                    [0, axis_length, 0],
+                    [0, 0, -axis_length],
+                ]
+            )
 
             # define cube points
             cube_length = 3 * self.square_size
-            cube_points = np.float32([[0,0,0], [0,cube_length,0], [cube_length,cube_length,0], [cube_length,0,0],
-                            [0,0,-cube_length],[0,cube_length,-cube_length],[cube_length,cube_length,-cube_length],[cube_length,0,-cube_length] ])
-            
+            cube_points = np.float32(
+                [
+                    [0, 0, 0],
+                    [0, cube_length, 0],
+                    [cube_length, cube_length, 0],
+                    [cube_length, 0, 0],
+                    [0, 0, -cube_length],
+                    [0, cube_length, -cube_length],
+                    [cube_length, cube_length, -cube_length],
+                    [cube_length, 0, -cube_length],
+                ]
+            )
+
             # project axis points to image plane
-            axis_imgpts, _ = cv2.projectPoints(axis_points, rvecs, tvecs, camera_matrix, dist_coeffs)
+            axis_imgpts, _ = cv2.projectPoints(
+                axis_points, rvecs, tvecs, camera_matrix, dist_coeffs
+            )
             # project cube points to image plane
-            cube_imgpts, _ = cv2.projectPoints(cube_points, rvecs, tvecs, camera_matrix, dist_coeffs)
+            cube_imgpts, _ = cv2.projectPoints(
+                cube_points, rvecs, tvecs, camera_matrix, dist_coeffs
+            )
 
             # define axis colors
             color_x = (90, 90, 219)
@@ -201,48 +222,135 @@ class CameraCalibrator:
 
             # draw axis lines
             origin = tuple(map(int, axis_imgpts[0].ravel()))
-            cv2.arrowedLine(img, origin, tuple(map(int, axis_imgpts[1].ravel())), color_x, 2, tipLength=0.03)
-            cv2.arrowedLine(img, origin, tuple(map(int, axis_imgpts[2].ravel())), color_y, 2, tipLength=0.03)
-            cv2.arrowedLine(img, origin, tuple(map(int, axis_imgpts[3].ravel())), color_z, 2, tipLength=0.03)
-            
+            cv2.arrowedLine(
+                img,
+                origin,
+                tuple(map(int, axis_imgpts[1].ravel())),
+                color_x,
+                2,
+                tipLength=0.03,
+            )
+            cv2.arrowedLine(
+                img,
+                origin,
+                tuple(map(int, axis_imgpts[2].ravel())),
+                color_y,
+                2,
+                tipLength=0.03,
+            )
+            cv2.arrowedLine(
+                img,
+                origin,
+                tuple(map(int, axis_imgpts[3].ravel())),
+                color_z,
+                2,
+                tipLength=0.03,
+            )
+
             # add axis labels
             font = cv2.FONT_HERSHEY_COMPLEX_SMALL
             offset = 15
-            img = cv2.putText(img, 'x', tuple(map(int, axis_imgpts[1].ravel() + offset)), font, 1, color_x, 2)
-            img = cv2.putText(img, 'y', tuple(map(int, axis_imgpts[2].ravel() + offset)), font, 1, color_y, 2)
-            img = cv2.putText(img, 'z', tuple(map(int, axis_imgpts[3].ravel() + offset)), font, 1, color_z, 2)
+            img = cv2.putText(
+                img,
+                "x",
+                tuple(map(int, axis_imgpts[1].ravel() + offset)),
+                font,
+                1,
+                color_x,
+                2,
+            )
+            img = cv2.putText(
+                img,
+                "y",
+                tuple(map(int, axis_imgpts[2].ravel() + offset)),
+                font,
+                1,
+                color_y,
+                2,
+            )
+            img = cv2.putText(
+                img,
+                "z",
+                tuple(map(int, axis_imgpts[3].ravel() + offset)),
+                font,
+                1,
+                color_z,
+                2,
+            )
 
             # define cube colors
             top_shade = (153, 255, 204)
             pillar_shade = (0, 153, 255)
 
-            cube_imgpts = np.int32(cube_imgpts).reshape(-1,2)
-            
+            cube_imgpts = np.int32(cube_imgpts).reshape(-1, 2)
+
             # draw pillars
-            for i,j in zip(range(4),range(4,8)):
-                img = cv2.line(img, tuple(cube_imgpts[i]), tuple(cube_imgpts[j]), pillar_shade, 1)
-            
+            for i, j in zip(range(4), range(4, 8)):
+                img = cv2.line(
+                    img, tuple(cube_imgpts[i]), tuple(cube_imgpts[j]), pillar_shade, 1
+                )
+
             # draw bottom borders
             img = cv2.drawContours(img, [cube_imgpts[:4]], -1, pillar_shade, 1)
 
-            # shade the top layer
-            img = cv2.drawContours(img, [cube_imgpts[4:]], -1, pillar_shade, -1)
+            # compute the center of the top face of the cube
+            top_face_center = np.mean(cube_points[4:], axis=0)
+            
+            # project center point to get its position relative to camera
+            center_imgpt, _ = cv2.projectPoints(
+                top_face_center, rvecs, tvecs, camera_matrix, dist_coeffs
+            )
+            
+            # get rotation matrix from rotation vector
+            R, _ = cv2.Rodrigues(rvecs)
+            
+            # calculate distance to camera (using translation and rotation)
+            camera_position = -np.dot(R.T, tvecs)
+            center_in_camera = np.dot(R, top_face_center.reshape(3,1)) + tvecs
+            distance = np.linalg.norm(center_in_camera)
+            
+            # calculate value (intensity) based on distance
+            max_distance = 4000
+            value = int(max(0, min(255, 255 * (1 - distance/max_distance))))
+            
+            # compute the normal vector of the top face
+            normal_vector = np.dot(R, np.array([0, 0, 1]))
+            
+            # compute the angle between the normal vector and the z-axis
+            camera_axis = np.array([0, 0, 1])
+            cos_angle = np.dot(normal_vector, camera_axis)
+            angle = np.arccos(cos_angle) * 180/np.pi
+            
+            # compute the saturation based on angle
+            max_angle = 45
+            saturation = int(max(0, min(255, 255 * (1 - angle/max_angle))))
+            
+            # compute the hue based on relative position using the azimuth angle in the x-y plane of the camera coordinates
+            azimuth = np.arctan2(center_in_camera[1], center_in_camera[0])
+            hue = int(((azimuth.item() + np.pi) * 180/np.pi) % 180)
+            
+            # convert HSV to BGR
+            hsv_color = np.uint8([[[hue, saturation, value]]])
+            bgr_color = cv2.cvtColor(hsv_color, cv2.COLOR_HSV2BGR)[0][0]
+            
+            # shade the top face
+            img = cv2.fillConvexPoly(img, cube_imgpts[4:], bgr_color.tolist())
 
             # draw top borders
             img = cv2.drawContours(img, [cube_imgpts[4:]], -1, pillar_shade, 1)
 
             # display image
-            cv2.imshow('Axes and Cube on Chessboard', img)
+            cv2.imshow("Axes and Cube on Chessboard", img)
             cv2.waitKey(0)
             cv2.destroyAllWindows()
 
             # save image with axes drawn if needed
             if save:
-                fname = os.path.basename(params_path).split('.')[0]
-                save_path = os.path.join(save_root, f'{fname}.png')
+                fname = os.path.basename(params_path).split(".")[0]
+                save_path = os.path.join(save_root, f"{fname}.png")
                 cv2.imwrite(save_path, img)
                 print(f"Image with axes drawn saved to {save_path}")
-            
+
             return img
         else:
             raise Exception("Chessboard corners not found!")
@@ -253,23 +361,25 @@ class CameraCalibrator:
         :param params_path: Path to the calibration parameters file
         :return: None
         """
-        camera_matrix, dist_coeffs, rvecs, tvecs = self.__load_calibration_data(params_path)
+        camera_matrix, dist_coeffs, rvecs, tvecs = self.__load_calibration_data(
+            params_path
+        )
         rvecs = [np.array(rvec) for rvec in rvecs]
         tvecs = [np.array(tvec) for tvec in tvecs]
 
         fig = plt.figure()
-        ax = fig.add_subplot(111, projection='3d')
-        ax.set_xlabel('X')
-        ax.set_ylabel('Y')
-        ax.set_zlabel('Z')
+        ax = fig.add_subplot(111, projection="3d")
+        ax.set_xlabel("X")
+        ax.set_ylabel("Y")
+        ax.set_zlabel("Z")
 
         # plot chessboard origin
-        ax.scatter(0, 0, 0, c='red', marker='o', label='Chessboard Origin')
+        ax.scatter(0, 0, 0, c="red", marker="o", label="Chessboard Origin")
         # plot the x,y,z axes
         axis_length = 30
-        ax.quiver(0, 0, 0, axis_length, 0, 0, color='r', label='X Axis')
-        ax.quiver(0, 0, 0, 0, axis_length, 0, color='g', label='Y Axis')
-        ax.quiver(0, 0, 0, 0, 0, -axis_length, color='b', label='Z Axis')
+        ax.quiver(0, 0, 0, axis_length, 0, 0, color="r", label="X Axis")
+        ax.quiver(0, 0, 0, 0, axis_length, 0, color="g", label="Y Axis")
+        ax.quiver(0, 0, 0, 0, 0, -axis_length, color="b", label="Z Axis")
 
         # plot camera poses
         for i in range(len(rvecs)):
@@ -277,15 +387,28 @@ class CameraCalibrator:
             R, _ = cv2.Rodrigues(rvecs[i])
             # since extrinsic params show image relative to camera, camera position is the inverse transformation of the params
             camera_position = -np.dot(R.T, tvecs[i].reshape(3, 1))
-            ax.scatter(camera_position[0], camera_position[1], camera_position[2], marker='^', label=f'Camera {i+1}')
-        
+            ax.scatter(
+                camera_position[0],
+                camera_position[1],
+                camera_position[2],
+                marker="^",
+                label=f"Camera {i+1}",
+            )
+
             # mark the center of the chessboard for visual clarity
             board_width = (self.width - 1) * self.square_size
             board_height = (self.height - 1) * self.square_size
             center_chessboard = np.array([board_width / 2, board_height / 2, 0])
-            ax.scatter(center_chessboard[0], center_chessboard[1], center_chessboard[2], marker='x', color='blue', label=f'Board center')
+            ax.scatter(
+                center_chessboard[0],
+                center_chessboard[1],
+                center_chessboard[2],
+                marker="x",
+                color="blue",
+                label=f"Board center",
+            )
 
-        ax.set_title('Camera Locations Relative to Chessboard')
+        ax.set_title("Camera Locations Relative to Chessboard")
         ax.legend()
 
         # plot the chessboard plane
@@ -295,10 +418,9 @@ class CameraCalibrator:
         y = np.linspace(0, board_height, 10)
         x, y = np.meshgrid(x, y)
         z = np.zeros_like(x)
-        ax.plot_surface(x, y, z, alpha=0.2, color='gray', label='Chessboard Plane')
+        ax.plot_surface(x, y, z, alpha=0.2, color="gray", label="Chessboard Plane")
 
         plt.show()
-
 
     def calibrate(self, display=False, save=True):
         """
@@ -316,7 +438,7 @@ class CameraCalibrator:
             ret, corners = cv2.findChessboardCorners(
                 gray_img, (self.height, self.width), None
             )
-            
+
             # if the corners are found, refine them using cornerSubPix
             if ret == True:
                 local_corners = cv2.cornerSubPix(
@@ -337,8 +459,8 @@ class CameraCalibrator:
                 )
                 cv2.imshow(os.path.basename(image_path), img)
                 cv2.waitKey(0)
-                cv2.destroyAllWindows()   
-            
+                cv2.destroyAllWindows()
+
         # calibrate the camera with no flags for default behavior of not fixing cx, cy, fx, or fy
         # this is not needed but ensures CALIB_FIX_PRINCIPAL_POINT and CALIB_FIX_FOCAL_LENGTH are not set
         c_ret, camera_matrix, dist_coeffs, rvecs, tvecs = cv2.calibrateCamera(
@@ -360,7 +482,6 @@ class CameraCalibrator:
             self.__save_calibration_data(
                 camera_matrix, dist_coeffs, rvecs, tvecs, save_path
             )
-        
 
 
 if __name__ == "__main__":
@@ -378,8 +499,5 @@ if __name__ == "__main__":
     calibrator = CameraCalibrator(TEST_IMG_PATH, (6, 9), TILE_SIZE)
     for i in range(1, 4):
         params_path = f"./output/run_{i}.json"
-        # calibrator.draw_axes_and_cube_on_chessboard(os.path.join(TEST_IMG_PATH, f"test.png"), params_path, save=True)
-        calibrator.plot_camera_locations(params_path)
-
-        
-        
+        calibrator.draw_axes_and_cube_on_chessboard(os.path.join(TEST_IMG_PATH, f"test.png"), params_path, save=True)
+        # calibrator.plot_camera_locations(params_path)
