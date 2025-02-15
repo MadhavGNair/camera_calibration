@@ -181,11 +181,15 @@ class CameraCalibrator:
                         break
 
                 gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-                ret, corners = cv2.findChessboardCorners(gray, (self.height, self.width), None)
+                ret, corners = cv2.findChessboardCorners(
+                    gray, (self.height, self.width), None
+                )
 
                 if ret:
                     # refine corner detection
-                    corners = cv2.cornerSubPix(gray, corners, (11, 11), (-1, -1), self.criteria)
+                    corners = cv2.cornerSubPix(
+                        gray, corners, (11, 11), (-1, -1), self.criteria
+                    )
 
                     # estimate rotation and translation vectors
                     ret, rvecs, tvecs = cv2.solvePnP(
@@ -300,7 +304,11 @@ class CameraCalibrator:
                     # draw pillars
                     for i, j in zip(range(4), range(4, 8)):
                         img = cv2.line(
-                            img, tuple(cube_imgpts[i]), tuple(cube_imgpts[j]), pillar_shade, 1
+                            img,
+                            tuple(cube_imgpts[i]),
+                            tuple(cube_imgpts[j]),
+                            pillar_shade,
+                            1,
                         )
 
                     # draw bottom borders
@@ -308,44 +316,44 @@ class CameraCalibrator:
 
                     # compute the center of the top face of the cube
                     top_face_center = np.mean(cube_points[4:], axis=0)
-                    
+
                     # project center point to get its position relative to camera
                     center_imgpt, _ = cv2.projectPoints(
                         top_face_center, rvecs, tvecs, camera_matrix, dist_coeffs
                     )
-                    
+
                     # get rotation matrix from rotation vector
                     R, _ = cv2.Rodrigues(rvecs)
-                    
+
                     # calculate distance to camera (using translation and rotation)
                     camera_position = -np.dot(R.T, tvecs)
-                    center_in_camera = np.dot(R, top_face_center.reshape(3,1)) + tvecs
+                    center_in_camera = np.dot(R, top_face_center.reshape(3, 1)) + tvecs
                     distance = np.linalg.norm(center_in_camera)
-                    
+
                     # calculate value (intensity) based on distance
                     max_distance = 4000
-                    value = int(max(0, min(255, 255 * (1 - distance/max_distance))))
-                    
+                    value = int(max(0, min(255, 255 * (1 - distance / max_distance))))
+
                     # compute the normal vector of the top face in camera coordinates
                     normal_vector = np.dot(R, np.array([0, 0, 1]))
-                    
+
                     # compute the angle between the normal vector (z-axis of the cube) and the z-axis (of the camera)
                     camera_axis = np.array([0, 0, 1])
                     cos_angle = np.dot(normal_vector, camera_axis)
-                    angle = np.arccos(cos_angle) * 180/np.pi
-                    
+                    angle = np.arccos(cos_angle) * 180 / np.pi
+
                     # compute the saturation based on angle
                     max_angle = 45
-                    saturation = int(max(0, min(255, 255 * (1 - angle/max_angle))))
-                    
+                    saturation = int(max(0, min(255, 255 * (1 - angle / max_angle))))
+
                     # compute the hue based on relative position using the azimuth angle in the x-y plane of the camera coordinates
                     azimuth_angle = np.arctan2(center_in_camera[1], center_in_camera[0])
-                    hue = int(((azimuth_angle.item() + np.pi) * 180/np.pi) % 180)
-                    
+                    hue = int(((azimuth_angle.item() + np.pi) * 180 / np.pi) % 180)
+
                     # convert HSV to BGR
                     hsv_color = np.uint8([[[hue, saturation, value]]])
                     bgr_color = cv2.cvtColor(hsv_color, cv2.COLOR_HSV2BGR)[0][0]
-                    
+
                     # shade the top face
                     img = cv2.fillConvexPoly(img, cube_imgpts[4:], bgr_color.tolist())
 
@@ -358,14 +366,14 @@ class CameraCalibrator:
                         break
                     else:
                         cv2.imshow("Axes and Cube on Chessboard", img)
-                        if cv2.waitKey(1) & 0xFF == ord('q'):
+                        if cv2.waitKey(1) & 0xFF == ord("q"):
                             break
                 else:
                     if cap is None:
                         raise Exception("Chessboard corners not found!")
                     else:
                         cv2.imshow("Axes and Cube on Chessboard", img)
-                        if cv2.waitKey(1) & 0xFF == ord('q'):
+                        if cv2.waitKey(1) & 0xFF == ord("q"):
                             break
 
                 # save image with axes drawn if needed
@@ -395,22 +403,22 @@ class CameraCalibrator:
         tvecs = [np.array(tvec) for tvec in tvecs]
 
         fig = plt.figure()
-        ax = fig.add_subplot(111, projection='3d')
+        ax = fig.add_subplot(111, projection="3d")
 
         # plot the axes at the origin
         axis_length = 30
 
         # x-axis
-        ax.plot([0, axis_length], [0, 0], [0, 0], 'r-', linewidth=2)
-        ax.text(axis_length, 0, 0, 'X', color='red')
+        ax.plot([0, axis_length], [0, 0], [0, 0], "r-", linewidth=2)
+        ax.text(axis_length, 0, 0, "X", color="red")
 
         # y-axis
-        ax.plot([0, 0], [0, axis_length], [0, 0], 'g-', linewidth=2)
-        ax.text(0, axis_length, 0, 'Y', color='green')
+        ax.plot([0, 0], [0, axis_length], [0, 0], "g-", linewidth=2)
+        ax.text(0, axis_length, 0, "Y", color="green")
 
         # z-axis (negated to match with axes plotting from ONLINE part of assignment)
-        ax.plot([0, 0], [0, 0], [0, -axis_length], 'b-', linewidth=2)
-        ax.text(0, 0, -axis_length, 'Z', color='blue')
+        ax.plot([0, 0], [0, 0], [0, -axis_length], "b-", linewidth=2)
+        ax.text(0, 0, -axis_length, "Z", color="blue")
 
         # plot each camera position
         for i in range(len(rvecs)):
@@ -420,7 +428,13 @@ class CameraCalibrator:
             # camera position is the inverse transformation of the chessboard to camera
             camera_position = -np.dot(R.T, tvecs[i])
 
-            ax.plot([camera_position[0, 0]], [camera_position[1, 0]], [camera_position[2, 0]], 'ro', markersize=5)
+            ax.plot(
+                [camera_position[0, 0]],
+                [camera_position[1, 0]],
+                [camera_position[2, 0]],
+                "ro",
+                markersize=5,
+            )
 
         # plot the chessboard grid
         x = np.arange(0, self.height) * self.square_size
@@ -436,14 +450,14 @@ class CameraCalibrator:
         z_flat = zv.flatten()
 
         # plot the grid points
-        ax.scatter(x_flat, y_flat, z_flat, c='k', marker='.')
+        ax.scatter(x_flat, y_flat, z_flat, c="k", marker=".")
 
         # set labels and title
-        ax.set_xlabel('X (mm)')
-        ax.set_ylabel('Y (mm)')
-        ax.set_zlabel('Z (mm)')
-        ax.set_title('Camera Positions and Chessboard Grid')
-        ax.set_aspect('equal')
+        ax.set_xlabel("X (mm)")
+        ax.set_ylabel("Y (mm)")
+        ax.set_zlabel("Z (mm)")
+        ax.set_title("Camera Positions and Chessboard Grid")
+        ax.set_aspect("equal")
 
         # show the plot
         plt.show()
@@ -529,5 +543,7 @@ if __name__ == "__main__":
         if USE_WEBCAM:
             calibrator.draw_axes_and_cube(0, params_path, save=False)
         else:
-            calibrator.draw_axes_and_cube(os.path.join(TEST_IMG_PATH, f"test.png"), params_path, save=False)
+            calibrator.draw_axes_and_cube(
+                os.path.join(TEST_IMG_PATH, f"test.png"), params_path, save=False
+            )
         # calibrator.plot_camera_locations(params_path)
