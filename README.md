@@ -6,7 +6,7 @@ Author: Madhav Girish Nair ([madhavgirish02@gmail.com](mailto:madhavgirish02@gma
 
 ## Directory Structure
 
- camera_calibration/
+camera_calibration/
 ├── images/
 │ ├── run_1/ # Calibration images for first run
 │ ├── run_2/ # Calibration images for second run
@@ -31,7 +31,7 @@ pip install -r requirements.txt
 ## Features
 
 - Camera calibration using chessboard pattern
-- Real-time visualization of 3D axes and cube on chessboard using webcam
+- Real-time visualization of 3D axes and cube on chessboard using webcam or IP camera
 - Support for both image files and live webcam input
 - 3D visualization of camera positions relative to chessboard
 - Automatic corner detection with manual fallback
@@ -55,7 +55,7 @@ python camera_calibrator.py
 
 #### Using Webcam
 
-1. Set `USE_WEBCAM = True` in the main section of `camera_calibrator.py`
+1. Set `camera_input_choice` to "webcam" for default webcam input or "ip camera" for IP camera input in the main section of `camera_calibrator.py`. If using IP camera, enter the IP address of the camera in the main section of `camera_calibrator.py`.
 2. Run:
 
 ```bash
@@ -67,7 +67,7 @@ python camera_calibrator.py
 
 #### Using Images
 
-1. Set `USE_WEBCAM = False` in the main section of `camera_calibrator.py`
+1. Set `camera_input_choice` to "static image" in the main section of `camera_calibrator.py`
 2. Place test images in `images/test/`
 3. Run:
 
@@ -82,10 +82,10 @@ To visualize the 3D positions of cameras relative to the chessboard:
 1. Uncomment the `calibrator.plot_camera_locations(params_path)` line
 2. Run the script
 
-
 ## Notes
 
 - note the 'save' parameter in all functions before running the script
 - the 'save' parameter is set to False by default
 - change the square size in the main section of the script to the actual size of the chessboard squares
 - plotting defaults to running for each run, if you want to plot for a single run, set the loop to run for a single run
+- the camera source can be a static image, a webcam, or an IP camera

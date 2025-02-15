@@ -155,8 +155,7 @@ class CameraCalibrator:
     ):
         """
         Function to draw X, Y, Z axes on the chessboard in the image based on estimated camera parameters.
-        Base code taken from: https://docs.opencv.org/3.4/d7/d53/tutorial_py_pose.html
-        :param image_source: Path to the image or camera index (int) for webcam
+        :param image_source: Path to the image, camera index (int) for webcam, or URL for IP camera
         :param params_path: Path to the calibration parameters file
         :param save: Boolean flag to save the image with axes drawn
         :param save_root: Root path to save the image with axes drawn
@@ -164,10 +163,19 @@ class CameraCalibrator:
         """
         camera_matrix, dist_coeffs, _, _ = self.__load_calibration_data(params_path)
 
-        # check if image_source is a path or camera index
+        # check if image_source is a path, camera index, or URL
         if isinstance(image_source, str):
-            cap = None
-            img = cv2.imread(image_source)
+            if image_source.startswith(("http://", "https://")):
+                cap = cv2.VideoCapture(image_source)
+                if not cap.isOpened():
+                    raise Exception("Could not open IP camera stream!")
+            elif image_source == 0:
+                cap = cv2.VideoCapture(image_source)
+                if not cap.isOpened():
+                    raise Exception("Could not open webcam!")
+            else:
+                cap = None
+                img = cv2.imread(image_source)
         else:
             cap = cv2.VideoCapture(image_source)
             if not cap.isOpened():
@@ -198,6 +206,7 @@ class CameraCalibrator:
 
                     # define axis points (origin and points along x, y, z axes)
                     axis_length = 6 * self.square_size
+
                     # NOTE: the z-axis is negated for aesthetic reasons so that it aligns with the cube. It was mentioned by Prof Poppe
                     # that this is fine as long as it is consistent across all the images. If not simply remove the negation for original view.
                     axis_points = np.float32(
@@ -228,6 +237,7 @@ class CameraCalibrator:
                     axis_imgpts, _ = cv2.projectPoints(
                         axis_points, rvecs, tvecs, camera_matrix, dist_coeffs
                     )
+
                     # project cube points to image plane
                     cube_imgpts, _ = cv2.projectPoints(
                         cube_points, rvecs, tvecs, camera_matrix, dist_coeffs
@@ -240,6 +250,7 @@ class CameraCalibrator:
 
                     # draw axis lines
                     origin = tuple(map(int, axis_imgpts[0].ravel()))
+
                     cv2.arrowedLine(
                         img,
                         origin,
@@ -248,6 +259,7 @@ class CameraCalibrator:
                         2,
                         tipLength=0.03,
                     )
+
                     cv2.arrowedLine(
                         img,
                         origin,
@@ -256,6 +268,7 @@ class CameraCalibrator:
                         2,
                         tipLength=0.03,
                     )
+
                     cv2.arrowedLine(
                         img,
                         origin,
@@ -268,6 +281,7 @@ class CameraCalibrator:
                     # add axis labels
                     font = cv2.FONT_HERSHEY_COMPLEX_SMALL
                     offset = 15
+
                     img = cv2.putText(
                         img,
                         "x",
@@ -277,6 +291,7 @@ class CameraCalibrator:
                         color_x,
                         2,
                     )
+
                     img = cv2.putText(
                         img,
                         "y",
@@ -286,6 +301,7 @@ class CameraCalibrator:
                         color_y,
                         2,
                     )
+
                     img = cv2.putText(
                         img,
                         "z",
@@ -298,7 +314,6 @@ class CameraCalibrator:
 
                     # define cube colors
                     pillar_shade = (0, 153, 255)
-
                     cube_imgpts = np.int32(cube_imgpts).reshape(-1, 2)
 
                     # draw pillars
@@ -382,7 +397,6 @@ class CameraCalibrator:
                     save_path = os.path.join(save_root, f"{fname}.png")
                     cv2.imwrite(save_path, img)
                     print(f"Image with axes drawn saved to {save_path}")
-
         finally:
             cv2.destroyAllWindows()
             if cap is not None:
@@ -534,16 +548,23 @@ if __name__ == "__main__":
     #     print(f"Calibration for Run {i} complete.")
 
     # ONLINE STEP:
-    # Load the calibration data
-    USE_WEBCAM = True
+    # load the calibration data
     TEST_IMG_PATH = os.path.join(root_path, "test")
     calibrator = CameraCalibrator(TEST_IMG_PATH, (6, 9), TILE_SIZE)
+
+    # select camera source (choose from "webcam", "ip camera" or "static image")
+    camera_input_choice = "static image"
+
+    camera_source = None
+    if camera_input_choice == "webcam":
+        camera_source = 0
+    elif camera_input_choice == "ip camera":
+        camera_source = "http://192.168.X.Y:PORT/video"
+    else:
+        camera_source = os.path.join(TEST_IMG_PATH, "test.png")
+
+    # run visualization
     for i in range(1, 4):
         params_path = f"./output/run_{i}.json"
-        if USE_WEBCAM:
-            calibrator.draw_axes_and_cube(0, params_path, save=False)
-        else:
-            calibrator.draw_axes_and_cube(
-                os.path.join(TEST_IMG_PATH, f"test.png"), params_path, save=False
-            )
+        calibrator.draw_axes_and_cube(camera_source, params_path, save=False)
         # calibrator.plot_camera_locations(params_path)

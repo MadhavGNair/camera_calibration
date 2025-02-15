@@ -9,6 +9,13 @@
 *.bmp
 *.ppm
 
+# video extensions
+*.mp4
+*.avi
+*.mov
+*.flv
+*.wmv
+
 # misc folder
 misc/
 
